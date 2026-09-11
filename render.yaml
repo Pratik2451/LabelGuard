@@ -10,6 +10,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PYTHON_VERSION
+        value: "3.13.5"
       - key: PADDLE_DEVICE
         value: cpu
       - key: PORT
