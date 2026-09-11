@@ -1265,15 +1265,44 @@ export const runOcrPipeline = (imagePaths) => {
 
         /*
         |--------------------------------------------------------------------------
-        | Store request
+        | Store request with a 120-second timeout.
+        | PaddleOCR on Render free tier can take 60-90s to load on cold start.
+        | Without a timeout the frontend axios call times out first → Network Error.
         |--------------------------------------------------------------------------
         */
+
+        const OCR_TIMEOUT_MS = 120_000;
+
+        const timeoutHandle = setTimeout(() => {
+            if (pendingRequests.has(requestId)) {
+                pendingRequests.delete(requestId);
+                console.error(
+                    `[OCR NODE] Request ${requestId} timed out after ${OCR_TIMEOUT_MS / 1000}s`
+                );
+                reject(
+                    new ApiError(
+                        504,
+                        "OCR engine did not respond in time. Please retry."
+                    )
+                );
+            }
+        }, OCR_TIMEOUT_MS);
+
+        // Wrap resolve/reject so we always clear the timeout
+        const resolveWithCleanup = (value) => {
+            clearTimeout(timeoutHandle);
+            resolve(value);
+        };
+        const rejectWithCleanup = (err) => {
+            clearTimeout(timeoutHandle);
+            reject(err);
+        };
 
         pendingRequests.set(
             requestId,
             {
-                resolve,
-                reject,
+                resolve: resolveWithCleanup,
+                reject: rejectWithCleanup,
                 startTime: requestStart,
                 payload: request,
                 sent: false
@@ -1289,6 +1318,7 @@ export const runOcrPipeline = (imagePaths) => {
 
         if (!pythonProcess) {
 
+            clearTimeout(timeoutHandle);
             pendingRequests.delete(
                 requestId
             );
@@ -1322,13 +1352,34 @@ export const runOcrPipeline = (imagePaths) => {
                     `[OCR NODE] Sending request to Python: ${requestId}`
                 );
 
-                pythonProcess.stdin.write(
-                    request + "\n"
-                );
-
-                console.log(
-                    "[OCR NODE] Request sent to Python"
-                );
+                /*
+                |--------------------------------------------------------------
+                | Wrap stdin.write in try/catch.
+                | An EPIPE here (pipe closed/broken) would otherwise be an
+                | uncaught exception that crashes the Node process → Render
+                | restarts the service → "Network Error" on the frontend.
+                |--------------------------------------------------------------
+                */
+                try {
+                    pythonProcess.stdin.write(
+                        request + "\n"
+                    );
+                    console.log(
+                        "[OCR NODE] Request sent to Python"
+                    );
+                } catch (writeErr) {
+                    console.error(
+                        "[OCR NODE] stdin.write failed (EPIPE?):",
+                        writeErr.message
+                    );
+                    pendingRequests.delete(requestId);
+                    rejectWithCleanup(
+                        new ApiError(
+                            500,
+                            `OCR pipe error: ${writeErr.message}`
+                        )
+                    );
+                }
 
             }
 

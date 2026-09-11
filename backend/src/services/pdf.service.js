@@ -130,6 +130,22 @@ export const generateProductReportPdf = (product, user) => {
             );
 
             const payload = {
+                inspectionId: product?.inspectionId,
+                createdAt: product?.createdAt,
+                structuredData: product?.structuredData || {},
+                complianceResults: product?.complianceResults || {},
+                originalImages: product?.originalImages || [],
+                rawOcrText: product?.rawOcrText || [],
+                boundingBoxes: product?.boundingBoxes || [],
+                backendRoot: process.cwd(),
+                officer: {
+                    id: user?._id ? user._id.toString() : "OFFICER-01",
+                    username: user?.username || "Officer",
+                    fullName: user?.fullName || user?.username || "Inspection Officer",
+                    email: user?.email || "",
+                    department: user?.department || "Legal Metrology Inspection Division",
+                    designation: user?.designation || "Senior Inspection Officer"
+                },
                 product,
                 user
             };

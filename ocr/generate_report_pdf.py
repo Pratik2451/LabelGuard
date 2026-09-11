@@ -86,9 +86,12 @@ def generate_pdf_report(payload_path, output_path):
     with open(payload_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # Extract Payload Data
-    inspection_id = data.get("inspectionId", "INSP-UNKNOWN")
-    created_at_raw = data.get("createdAt", "")
+    # Extract Payload Data (supports both flat and nested product/user payloads)
+    prod = data.get("product") if isinstance(data.get("product"), dict) else data
+    user_info = data.get("user") if isinstance(data.get("user"), dict) else data.get("officer", {})
+
+    inspection_id = data.get("inspectionId") or prod.get("inspectionId", "INSP-UNKNOWN")
+    created_at_raw = data.get("createdAt") or prod.get("createdAt", "")
     try:
         dt = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
         created_at_str = dt.strftime("%B %d, %Y - %H:%M:%S UTC")
@@ -97,16 +100,16 @@ def generate_pdf_report(payload_path, output_path):
 
     gen_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    officer = data.get("officer", {})
+    officer = data.get("officer") or user_info or {}
     officer_name = officer.get("fullName") or officer.get("username") or "Inspection Officer"
     officer_dept = officer.get("department") or "Legal Metrology Inspection Division"
     officer_desig = officer.get("designation") or "Senior Compliance Auditor"
-    officer_id = officer.get("id") or "OFFICER-REG-01"
+    officer_id = officer.get("id") or str(officer.get("_id", "")) or "OFFICER-REG-01"
 
-    structured = data.get("structuredData", {})
-    compliance = data.get("complianceResults", {})
-    original_images = data.get("originalImages", [])
-    backend_root = data.get("backendRoot", os.getcwd())
+    structured = data.get("structuredData") or prod.get("structuredData", {})
+    compliance = data.get("complianceResults") or prod.get("complianceResults", {})
+    original_images = data.get("originalImages") or prod.get("originalImages", [])
+    backend_root = data.get("backendRoot") or prod.get("backendRoot", os.getcwd())
 
     # Build PDF Document
     doc = SimpleDocTemplate(
