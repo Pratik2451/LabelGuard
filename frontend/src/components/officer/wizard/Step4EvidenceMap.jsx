@@ -99,18 +99,12 @@ export default function Step4EvidenceMap({
   const currentField = declarationFields.find(f => f.key === selectedFieldKey);
   const activeBbox = currentField?.data?.bbox || null;
 
-  // Active image path (served from backend static /public)
   // Active image path (served from backend static /public or remote Render URL)
   const currentImageRecord = surfaces[selectedSurfaceIndex] || {};
-  let currentImagePath = currentImageRecord.imagePath || originalImages[selectedSurfaceIndex] || '';
-  if (currentImagePath.startsWith('public\\') || currentImagePath.startsWith('public/')) {
-    currentImagePath = '/' + currentImagePath.replace(/\\/g, '/');
-  } else if (!currentImagePath.startsWith('/')) {
-    currentImagePath = '/' + currentImagePath.replace(/\\/g, '/');
-  }
   const rawImagePath = currentImageRecord.imagePath || originalImages[selectedSurfaceIndex] || '';
   const currentImagePath = getImageUrl(rawImagePath);
 
+  
   // Draw bounding box overlay on canvas
   useEffect(() => {
     const canvas = canvasRef.current;

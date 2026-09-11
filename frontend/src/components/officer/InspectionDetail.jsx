@@ -172,13 +172,8 @@ export default function InspectionDetail({
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           {(surfaces.length > 0 ? surfaces : originalImages.map((img, i) => ({ surfaceName: `Surface ${i + 1}`, imagePath: img }))).map((s, idx) => {
-            let imgUrl = s.imagePath || '';
-            if (imgUrl.startsWith('public\\') || imgUrl.startsWith('public/')) {
-              imgUrl = '/' + imgUrl.replace(/\\/g, '/');
-            } else if (!imgUrl.startsWith('/')) {
-              imgUrl = '/' + imgUrl.replace(/\\/g, '/');
-            }
             const imgUrl = getImageUrl(s.imagePath || '');
+
 
             return (
               <div key={idx} style={{
