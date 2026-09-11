@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import StatusBadge from '../common/StatusBadge';
+import { getImageUrl } from '../../utils/imageUrl';
 
 export default function InspectionDetail({
   inspection,
@@ -177,6 +178,7 @@ export default function InspectionDetail({
             } else if (!imgUrl.startsWith('/')) {
               imgUrl = '/' + imgUrl.replace(/\\/g, '/');
             }
+            const imgUrl = getImageUrl(s.imagePath || '');
 
             return (
               <div key={idx} style={{

@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
 import { ApiError } from "../utils/ApiError.js";
+import { resolvePythonExecutable, resolveOcrPaths } from "./pythonEnv.js";
 
 export const generateProductReportPdf = (product, user) => {
     return new Promise((resolve, reject) => {
@@ -44,6 +45,15 @@ export const generateProductReportPdf = (product, user) => {
         const pythonScriptPath = path.resolve(process.cwd(), "../ocr/generate_report_pdf.py");
         const pythonProcess = spawn("python", [pythonScriptPath, payloadPath, pdfOutputPath], {
             cwd: path.resolve(process.cwd(), "../ocr")
+        const { ocrDir, pdfScript } = resolveOcrPaths();
+        const pythonExecutable = resolvePythonExecutable();
+
+        const pythonProcess = spawn(pythonExecutable, [pdfScript, payloadPath, pdfOutputPath], {
+            cwd: ocrDir,
+            env: {
+                ...process.env,
+                PYTHONUNBUFFERED: "1"
+            }
         });
 
         let stdoutData = "";

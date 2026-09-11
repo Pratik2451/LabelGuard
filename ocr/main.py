@@ -141,10 +141,24 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
+# Determine device: default to 'cpu' (Render has no GPU)
+# If GPU requested, check if paddle is compiled with CUDA and has available GPU
+paddle_device = os.environ.get("PADDLE_DEVICE", "cpu").strip().lower()
+if paddle_device.startswith("gpu"):
+    try:
+        import paddle
+        if not paddle.is_compiled_with_cuda() or paddle.device.cuda.device_count() == 0:
+            print("[OCR] No CUDA/GPU available, falling back to CPU", file=sys.stderr, flush=True)
+            paddle_device = "cpu"
+    except Exception:
+        paddle_device = "cpu"
+
+print(f"[OCR] Initializing PaddleOCR on device: {paddle_device}", file=sys.stderr, flush=True)
+
 # Load OCR model ONCE
 ocr = PaddleOCR(
     lang="en",
-    device="gpu:0",
+    device=paddle_device,
     engine="paddle",
     text_detection_model_name="PP-OCRv6_tiny_det",
     text_recognition_model_name="PP-OCRv6_tiny_rec",

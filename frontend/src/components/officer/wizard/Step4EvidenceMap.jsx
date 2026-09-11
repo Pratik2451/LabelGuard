@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import StatusBadge from '../../common/StatusBadge';
+import { getImageUrl } from '../../../utils/imageUrl';
 
 export default function Step4EvidenceMap({
   inspection,
@@ -99,6 +100,7 @@ export default function Step4EvidenceMap({
   const activeBbox = currentField?.data?.bbox || null;
 
   // Active image path (served from backend static /public)
+  // Active image path (served from backend static /public or remote Render URL)
   const currentImageRecord = surfaces[selectedSurfaceIndex] || {};
   let currentImagePath = currentImageRecord.imagePath || originalImages[selectedSurfaceIndex] || '';
   if (currentImagePath.startsWith('public\\') || currentImagePath.startsWith('public/')) {
@@ -106,6 +108,8 @@ export default function Step4EvidenceMap({
   } else if (!currentImagePath.startsWith('/')) {
     currentImagePath = '/' + currentImagePath.replace(/\\/g, '/');
   }
+  const rawImagePath = currentImageRecord.imagePath || originalImages[selectedSurfaceIndex] || '';
+  const currentImagePath = getImageUrl(rawImagePath);
 
   // Draw bounding box overlay on canvas
   useEffect(() => {

@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: labelguard-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: "cd backend && npm install && pip install -r ../ocr/requirements.txt"
+    startCommand: "cd backend && npm start"
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PADDLE_DEVICE
+        value: cpu
+      - key: PORT
+        value: 10000
+      - key: CORS_ORIGIN
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: DB_NAME
+        value: LabelGuard
+      - key: ACCESS_TOKEN_SECRET
+        generateValue: true
+      - key: ACCESS_TOKEN_EXPIRY
+        value: 1d
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_EXPIRY
+        value: 10d
+

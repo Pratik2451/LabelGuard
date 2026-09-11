@@ -280,16 +280,609 @@
 
 
 
+// import { spawn } from "child_process";
+// import path from "path";
+// import crypto from "crypto";
+// import { ApiError } from "../utils/ApiError.js";
+// import { resolvePythonExecutable, resolveOcrPaths } from "./pythonEnv.js";
+
+
+// let pythonProcess = null;
+
+// let stdoutBuffer = "";
+
+// let pythonReady = false;
+
+// const pendingRequests = new Map();
+
+
+// /*
+// |--------------------------------------------------------------------------
+// | Start persistent Python OCR server
+// |--------------------------------------------------------------------------
+// */
+
+// function startPythonOcrServer() {
+
+//     // Already running
+//     if (pythonProcess) {
+//         return;
+//     }
+
+//     const { ocrDir, ocrServerScript } = resolveOcrPaths();
+//     const pythonExecutable = resolvePythonExecutable();
+
+//     const pythonScriptPath = path.resolve(
+//         process.cwd(),
+//         "../ocr/ocr_server.py"
+//     );
+
+
+//     // const pythonExecutable = path.resolve(
+//     //     process.cwd(),
+//     //     "../.venv/Scripts/python.exe"
+//     // );
+//     const pythonExecutable = "python3";
+
+
+//     const ocrWorkingDirectory = path.resolve(
+//         process.cwd(),
+//         "../ocr"
+//     );
+
+
+//     console.log("======================================");
+//     console.log("Starting persistent Python OCR server...");
+//     console.log("Using Python:", pythonExecutable);
+//     console.log("OCR script:", pythonScriptPath);
+//     console.log("OCR script:", ocrServerScript);
+//     console.log("OCR working dir:", ocrDir);
+//     console.log("======================================");
+
+
+//     pythonProcess = spawn(
+//         pythonExecutable,
+//         [pythonScriptPath],
+//         [ocrServerScript],
+//         {
+//             cwd: ocrWorkingDirectory
+//             cwd: ocrDir,
+//             env: {
+//                 ...process.env,
+//                 PYTHONUNBUFFERED: "1",
+//                 PADDLE_DEVICE: process.env.PADDLE_DEVICE || "cpu"
+//             }
+//         }
+//     );
+
+
+//     /*
+//     |--------------------------------------------------------------------------
+//     | Python STDOUT
+//     |--------------------------------------------------------------------------
+//     */
+
+//     pythonProcess.stdout.on("data", (data) => {
+
+//         stdoutBuffer += data.toString();
+
+
+//         const lines = stdoutBuffer.split("\n");
+
+
+//         // Keep incomplete line for next chunk
+//         stdoutBuffer = lines.pop() || "";
+
+
+//         for (const line of lines) {
+
+//             const trimmedLine = line.trim();
+
+
+//             if (!trimmedLine) {
+//                 continue;
+//             }
+
+
+//             /*
+//             |--------------------------------------------------------------------------
+//             | OCR server ready
+//             |--------------------------------------------------------------------------
+//             */
+
+//             if (trimmedLine === "OCR_READY") {
+
+//                 pythonReady = true;
+
+//                 console.log(
+//                     "[OCR NODE] Python OCR server is READY"
+//                 );
+
+//                 continue;
+//             }
+
+
+//             /*
+//             |--------------------------------------------------------------------------
+//             | OCR response
+//             |--------------------------------------------------------------------------
+//             */
+
+//             if (!trimmedLine.startsWith("__OCR_RESPONSE__")) {
+//                 continue;
+//             }
+
+
+//             try {
+
+//                 const jsonString =
+//                     trimmedLine.replace(
+//                         "__OCR_RESPONSE__",
+//                         ""
+//                     );
+
+
+//                 const result = JSON.parse(jsonString);
+
+
+//                 const requestId = result.requestId;
+
+
+//                 console.log(
+//                     `[OCR NODE] Python response received: ${requestId}`
+//                 );
+
+
+//                 const request =
+//                     pendingRequests.get(requestId);
+
+
+//                 if (!request) {
+
+//                     console.error(
+//                         "[OCR NODE] No pending request found for:",
+//                         requestId
+//                     );
+
+//                     continue;
+//                 }
+
+
+//                 pendingRequests.delete(requestId);
+
+
+//                 const elapsed =
+//                     (
+//                         (Date.now() - request.startTime)
+//                         / 1000
+//                     ).toFixed(2);
+
+
+//                 console.log(
+//                     `[OCR NODE] Request completed in ${elapsed} seconds`
+//                 );
+
+
+//                 if (!result.success) {
+
+//                     request.reject(
+//                         new ApiError(
+//                             500,
+//                             result.error ||
+//                             "OCR processing failed"
+//                         )
+//                     );
+
+//                 } else {
+
+//                     request.resolve(result);
+
+//                 }
+
+//             } catch (error) {
+
+//                 console.error(
+//                     "[OCR NODE] Failed to parse OCR response:",
+//                     error
+//                 );
+
+//             }
+//         }
+//     });
+
+
+//     /*
+//     |--------------------------------------------------------------------------
+//     | Python STDERR
+//     |--------------------------------------------------------------------------
+//     */
+
+//     pythonProcess.stderr.on("data", (data) => {
+
+//         const message = data.toString().trim();
+
+
+//         if (message) {
+
+//             console.log(
+//                 "[OCR]",
+//                 message
+//             );
+
+//         }
+
+//     });
+
+
+//     /*
+//     |--------------------------------------------------------------------------
+//     | Python process closed
+//     |--------------------------------------------------------------------------
+//     */
+
+//     pythonProcess.on("close", (code) => {
+
+//         console.error(
+//             `Python OCR server stopped with code ${code}`
+//         );
+
+
+//         pythonProcess = null;
+
+//         pythonReady = false;
+
+//         stdoutBuffer = "";
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Reject all pending requests
+//         |--------------------------------------------------------------------------
+//         */
+
+//         for (
+//             const request
+//             of pendingRequests.values()
+//         ) {
+
+//             request.reject(
+//                 new ApiError(
+//                     500,
+//                     "OCR engine stopped unexpectedly"
+//                 )
+//             );
+
+//         }
+
+
+//         pendingRequests.clear();
+
+//     });
+
+
+//     /*
+//     |--------------------------------------------------------------------------
+//     | Python process error
+//     |--------------------------------------------------------------------------
+//     */
+
+//     pythonProcess.on("error", (error) => {
+
+//         console.error(
+//             "Failed to start Python OCR server:",
+//             error
+//         );
+
+
+//         pythonProcess = null;
+
+//         pythonReady = false;
+
+
+//         for (
+//             const request
+//             of pendingRequests.values()
+//         ) {
+
+//             request.reject(
+//                 new ApiError(
+//                     500,
+//                     `Failed to launch OCR engine: ${error.message}`
+//                 )
+//             );
+
+//         }
+
+
+//         pendingRequests.clear();
+
+//     });
+
+// }
+
+
+// /*
+// |--------------------------------------------------------------------------
+// | Run OCR pipeline
+// |--------------------------------------------------------------------------
+// */
+
+// export const runOcrPipeline = (imagePaths) => {
+
+//     return new Promise((resolve, reject) => {
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Validate image paths
+//         |--------------------------------------------------------------------------
+//         */
+
+//         if (
+//             !imagePaths ||
+//             imagePaths.length === 0
+//         ) {
+
+//             return reject(
+//                 new ApiError(
+//                     400,
+//                     "No image paths provided for OCR execution"
+//                 )
+//             );
+
+//         }
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Make sure Python server is running
+//         |--------------------------------------------------------------------------
+//         */
+
+//         startPythonOcrServer();
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Convert image paths to absolute paths
+//         |--------------------------------------------------------------------------
+//         */
+
+//         const absoluteImagePaths =
+//             imagePaths.map(
+//                 p => path.resolve(
+//                     process.cwd(),
+//                     p
+//                 )
+//             );
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Create unique request ID
+//         |--------------------------------------------------------------------------
+//         */
+
+//         const requestId =
+//             crypto.randomUUID();
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Record request start time
+//         |--------------------------------------------------------------------------
+//         */
+
+//         const requestStart =
+//             Date.now();
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Store request
+//         |--------------------------------------------------------------------------
+//         */
+
+//         pendingRequests.set(
+//             requestId,
+//             {
+//                 resolve,
+//                 reject,
+//                 startTime: requestStart
+//             }
+//         );
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Create request payload
+//         |--------------------------------------------------------------------------
+//         */
+
+//         const request =
+//             JSON.stringify({
+//                 requestId,
+//                 imagePaths: absoluteImagePaths
+//             });
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Python process check
+//         |--------------------------------------------------------------------------
+//         */
+
+//         if (!pythonProcess) {
+
+//             pendingRequests.delete(
+//                 requestId
+//             );
+
+
+//             return reject(
+//                 new ApiError(
+//                     500,
+//                     "OCR Python process could not be started"
+//                 )
+//             );
+
+//         }
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | IMPORTANT:
+//         | If Python is still loading the model, do NOT send the request yet.
+//         |
+//         | Normally this won't happen because the server starts during
+//         | backend initialization, but this protects against race conditions.
+//         |--------------------------------------------------------------------------
+//         */
+
+//         if (!pythonReady) {
+
+//             console.log(
+//                 `[OCR NODE] Python not ready yet. Request ${requestId} is waiting.`
+//             );
+
+
+//             /*
+//             |--------------------------------------------------------------------------
+//             | Wait until OCR_READY
+//             |--------------------------------------------------------------------------
+//             |
+//             | We don't need another queue here.
+//             | The request stays inside pendingRequests.
+//             |
+//             | When OCR_READY arrives, we send all waiting requests.
+//             |--------------------------------------------------------------------------
+//             */
+
+//             const waitForReady = setInterval(() => {
+
+//                 if (!pythonProcess) {
+
+//                     clearInterval(waitForReady);
+
+//                     if (pendingRequests.has(requestId)) {
+
+//                         pendingRequests.delete(
+//                             requestId
+//                         );
+
+//                         reject(
+//                             new ApiError(
+//                                 500,
+//                                 "OCR Python process stopped before becoming ready"
+//                             )
+//                         );
+
+//                     }
+
+//                     return;
+//                 }
+
+
+//                 if (pythonReady) {
+
+//                     clearInterval(waitForReady);
+
+
+//                     console.log(
+//                         `[OCR NODE] Sending queued request: ${requestId}`
+//                     );
+
+
+//                     pythonProcess.stdin.write(
+//                         request + "\n"
+//                     );
+
+//                 }
+
+//             }, 50);
+
+
+//             return;
+//         }
+
+
+//         /*
+//         |--------------------------------------------------------------------------
+//         | Python is already ready
+//         |--------------------------------------------------------------------------
+//         */
+
+//         console.log(
+//             `[OCR NODE] Sending request to Python: ${requestId}`
+//         );
+
+
+//         pythonProcess.stdin.write(
+//             request + "\n"
+//         );
+
+
+//         console.log(
+//             `[OCR NODE] Request sent to Python`
+//         );
+
+//     });
+
+// };
+
+
+// /*
+// |--------------------------------------------------------------------------
+// | START OCR SERVER WHEN NODE IMPORTS THIS SERVICE
+// |--------------------------------------------------------------------------
+// |
+// | This is the important optimization.
+// |
+// | Previously:
+// |
+// |   User inspection
+// |        ↓
+// |   Start Python
+// |        ↓
+// |   Load PaddleOCR
+// |        ↓
+// |   OCR
+// |
+// | Now:
+// |
+// |   Node starts
+// |        ↓
+// |   Start Python
+// |        ↓
+// |   Load PaddleOCR
+// |        ↓
+// |   OCR_READY
+// |        ↓
+// |   Wait
+// |        ↓
+// |   User inspection
+// |        ↓
+// |   OCR immediately
+// |
+// |--------------------------------------------------------------------------
+// */
+
+// startPythonOcrServer();
+
+
+
 import { spawn } from "child_process";
 import path from "path";
 import crypto from "crypto";
 import { ApiError } from "../utils/ApiError.js";
+import {
+    resolvePythonExecutable,
+    resolveOcrPaths
+} from "./pythonEnv.js";
 
 
 let pythonProcess = null;
-
 let stdoutBuffer = "";
-
 let pythonReady = false;
 
 const pendingRequests = new Map();
@@ -308,37 +901,26 @@ function startPythonOcrServer() {
         return;
     }
 
-
-    const pythonScriptPath = path.resolve(
-        process.cwd(),
-        "../ocr/ocr_server.py"
-    );
-
-
-    const pythonExecutable = path.resolve(
-        process.cwd(),
-        "../.venv/Scripts/python.exe"
-    );
-
-
-    const ocrWorkingDirectory = path.resolve(
-        process.cwd(),
-        "../ocr"
-    );
-
+    const { ocrDir, ocrServerScript } = resolveOcrPaths();
+    const pythonExecutable = resolvePythonExecutable();
 
     console.log("======================================");
     console.log("Starting persistent Python OCR server...");
     console.log("Using Python:", pythonExecutable);
-    console.log("OCR script:", pythonScriptPath);
+    console.log("OCR script:", ocrServerScript);
+    console.log("OCR working dir:", ocrDir);
     console.log("======================================");
-
 
     pythonProcess = spawn(
         pythonExecutable,
-        [pythonScriptPath],
+        [ocrServerScript],
         {
-            cwd: ocrWorkingDirectory
+            cwd: ocrDir,
+            env: {
+                ...process.env,
+                PYTHONUNBUFFERED: "1",
+                PADDLE_DEVICE: process.env.PADDLE_DEVICE || "cpu"
+            }
         }
     );
 
@@ -353,18 +935,14 @@ function startPythonOcrServer() {
 
         stdoutBuffer += data.toString();
 
-
         const lines = stdoutBuffer.split("\n");
-
 
         // Keep incomplete line for next chunk
         stdoutBuffer = lines.pop() || "";
 
-
         for (const line of lines) {
 
             const trimmedLine = line.trim();
-
 
             if (!trimmedLine) {
                 continue;
@@ -385,6 +963,35 @@ function startPythonOcrServer() {
                     "[OCR NODE] Python OCR server is READY"
                 );
 
+                // Send any requests that were waiting for OCR initialization
+                for (const [requestId, request] of pendingRequests.entries()) {
+
+                    if (!request.sent) {
+
+                        request.sent = true;
+
+                        console.log(
+                            `[OCR NODE] Sending queued request: ${requestId}`
+                        );
+
+                        try {
+                            pythonProcess.stdin.write(
+                                request.payload + "\n"
+                            );
+                        } catch (error) {
+
+                            pendingRequests.delete(requestId);
+
+                            request.reject(
+                                new ApiError(
+                                    500,
+                                    `Failed to send OCR request: ${error.message}`
+                                )
+                            );
+                        }
+                    }
+                }
+
                 continue;
             }
 
@@ -399,7 +1006,6 @@ function startPythonOcrServer() {
                 continue;
             }
 
-
             try {
 
                 const jsonString =
@@ -408,21 +1014,16 @@ function startPythonOcrServer() {
                         ""
                     );
 
-
                 const result = JSON.parse(jsonString);
 
-
                 const requestId = result.requestId;
-
 
                 console.log(
                     `[OCR NODE] Python response received: ${requestId}`
                 );
 
-
                 const request =
                     pendingRequests.get(requestId);
-
 
                 if (!request) {
 
@@ -434,9 +1035,7 @@ function startPythonOcrServer() {
                     continue;
                 }
 
-
                 pendingRequests.delete(requestId);
-
 
                 const elapsed =
                     (
@@ -444,11 +1043,9 @@ function startPythonOcrServer() {
                         / 1000
                     ).toFixed(2);
 
-
                 console.log(
                     `[OCR NODE] Request completed in ${elapsed} seconds`
                 );
-
 
                 if (!result.success) {
 
@@ -488,7 +1085,6 @@ function startPythonOcrServer() {
 
         const message = data.toString().trim();
 
-
         if (message) {
 
             console.log(
@@ -513,13 +1109,9 @@ function startPythonOcrServer() {
             `Python OCR server stopped with code ${code}`
         );
 
-
         pythonProcess = null;
-
         pythonReady = false;
-
         stdoutBuffer = "";
-
 
         /*
         |--------------------------------------------------------------------------
@@ -541,7 +1133,6 @@ function startPythonOcrServer() {
 
         }
 
-
         pendingRequests.clear();
 
     });
@@ -560,11 +1151,8 @@ function startPythonOcrServer() {
             error
         );
 
-
         pythonProcess = null;
-
         pythonReady = false;
-
 
         for (
             const request
@@ -579,7 +1167,6 @@ function startPythonOcrServer() {
             );
 
         }
-
 
         pendingRequests.clear();
 
@@ -597,7 +1184,6 @@ function startPythonOcrServer() {
 export const runOcrPipeline = (imagePaths) => {
 
     return new Promise((resolve, reject) => {
-
 
         /*
         |--------------------------------------------------------------------------
@@ -656,28 +1242,12 @@ export const runOcrPipeline = (imagePaths) => {
 
         /*
         |--------------------------------------------------------------------------
-        | Record request start time
+        | Record request start
         |--------------------------------------------------------------------------
         */
 
         const requestStart =
             Date.now();
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Store request
-        |--------------------------------------------------------------------------
-        */
-
-        pendingRequests.set(
-            requestId,
-            {
-                resolve,
-                reject,
-                startTime: requestStart
-            }
-        );
 
 
         /*
@@ -695,6 +1265,24 @@ export const runOcrPipeline = (imagePaths) => {
 
         /*
         |--------------------------------------------------------------------------
+        | Store request
+        |--------------------------------------------------------------------------
+        */
+
+        pendingRequests.set(
+            requestId,
+            {
+                resolve,
+                reject,
+                startTime: requestStart,
+                payload: request,
+                sent: false
+            }
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
         | Python process check
         |--------------------------------------------------------------------------
         */
@@ -704,7 +1292,6 @@ export const runOcrPipeline = (imagePaths) => {
             pendingRequests.delete(
                 requestId
             );
-
 
             return reject(
                 new ApiError(
@@ -718,100 +1305,47 @@ export const runOcrPipeline = (imagePaths) => {
 
         /*
         |--------------------------------------------------------------------------
-        | IMPORTANT:
-        | If Python is still loading the model, do NOT send the request yet.
-        |
-        | Normally this won't happen because the server starts during
-        | backend initialization, but this protects against race conditions.
+        | Python readiness
         |--------------------------------------------------------------------------
         */
 
-        if (!pythonReady) {
+        if (pythonReady) {
+
+            const requestEntry =
+                pendingRequests.get(requestId);
+
+            if (requestEntry) {
+
+                requestEntry.sent = true;
+
+                console.log(
+                    `[OCR NODE] Sending request to Python: ${requestId}`
+                );
+
+                pythonProcess.stdin.write(
+                    request + "\n"
+                );
+
+                console.log(
+                    "[OCR NODE] Request sent to Python"
+                );
+
+            }
+
+        } else {
 
             console.log(
                 `[OCR NODE] Python not ready yet. Request ${requestId} is waiting.`
             );
 
-
             /*
             |--------------------------------------------------------------------------
-            | Wait until OCR_READY
-            |--------------------------------------------------------------------------
-            |
-            | We don't need another queue here.
-            | The request stays inside pendingRequests.
-            |
-            | When OCR_READY arrives, we send all waiting requests.
+            | The request remains in pendingRequests.
+            | When OCR_READY arrives, all waiting requests are sent.
             |--------------------------------------------------------------------------
             */
 
-            const waitForReady = setInterval(() => {
-
-                if (!pythonProcess) {
-
-                    clearInterval(waitForReady);
-
-                    if (pendingRequests.has(requestId)) {
-
-                        pendingRequests.delete(
-                            requestId
-                        );
-
-                        reject(
-                            new ApiError(
-                                500,
-                                "OCR Python process stopped before becoming ready"
-                            )
-                        );
-
-                    }
-
-                    return;
-                }
-
-
-                if (pythonReady) {
-
-                    clearInterval(waitForReady);
-
-
-                    console.log(
-                        `[OCR NODE] Sending queued request: ${requestId}`
-                    );
-
-
-                    pythonProcess.stdin.write(
-                        request + "\n"
-                    );
-
-                }
-
-            }, 50);
-
-
-            return;
         }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Python is already ready
-        |--------------------------------------------------------------------------
-        */
-
-        console.log(
-            `[OCR NODE] Sending request to Python: ${requestId}`
-        );
-
-
-        pythonProcess.stdin.write(
-            request + "\n"
-        );
-
-
-        console.log(
-            `[OCR NODE] Request sent to Python`
-        );
 
     });
 
@@ -823,33 +1357,19 @@ export const runOcrPipeline = (imagePaths) => {
 | START OCR SERVER WHEN NODE IMPORTS THIS SERVICE
 |--------------------------------------------------------------------------
 |
-| This is the important optimization.
-|
-| Previously:
-|
-|   User inspection
-|        ↓
-|   Start Python
-|        ↓
-|   Load PaddleOCR
-|        ↓
-|   OCR
-|
-| Now:
-|
-|   Node starts
-|        ↓
-|   Start Python
-|        ↓
-|   Load PaddleOCR
-|        ↓
-|   OCR_READY
-|        ↓
-|   Wait
-|        ↓
-|   User inspection
-|        ↓
-|   OCR immediately
+| Node starts
+|     ↓
+| Start Python
+|     ↓
+| Load PaddleOCR
+|     ↓
+| OCR_READY
+|     ↓
+| Wait
+|     ↓
+| User inspection
+|     ↓
+| OCR
 |
 |--------------------------------------------------------------------------
 */
